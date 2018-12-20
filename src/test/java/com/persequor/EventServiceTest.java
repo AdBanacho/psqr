@@ -22,9 +22,12 @@ public class EventServiceTest {
         service = new EventService(serializer, repository);
     }
 
+    /*
+     * Write all the tests you need
     @Test
-    public void happyPath() throws Throwable
+    public void someCleverTestName() throws Throwable
     {
         service.process("{id:'4ba28c38-6c9b-4926-b6f5-0d45794fc41f', created_at: '2018-01-12T13:37:30Z', source: 'interweb', action: 'take-over'}");
     }
+    */
 }

@@ -16,8 +16,10 @@ public class EventSerializerTest {
         serializer = new EventSerializer(new GsonBuilder().create());
     }
 
+    /*
+     * Write all the tests you need
     @Test
-    public void serializeHappyPath() throws Throwable {
+    public void someCoolTestCaseName() throws Throwable {
         Event event = new Event();
         event.setCreatedAt(LocalDateTime.now());
         event.setId(UUID.randomUUID());
@@ -28,7 +30,8 @@ public class EventSerializerTest {
     }
 
     @Test
-    public void deserializeHappyPath() throws Throwable {
+    public void someCoolTestCaseName2() throws Throwable {
         Event actual = serializer.deserialize("{id:'4ba28c38-6c9b-4926-b6f5-0d45794fc41f', created_at: '2018-01-12T13:37:30Z', source: 'interweb', action: 'take-over'}");
     }
+    */
 }

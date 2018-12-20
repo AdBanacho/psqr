@@ -5,8 +5,8 @@ import com.persequor.repository.EventRepository;
 
 public class EventService {
 
-    private EventSerializer eventSerializer;
-    private EventRepository repository;
+    private final EventSerializer eventSerializer;
+    private final EventRepository repository;
 
     public EventService(EventSerializer eventSerializer, EventRepository repository)
     {

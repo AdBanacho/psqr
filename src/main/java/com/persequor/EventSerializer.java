@@ -4,7 +4,7 @@ import com.google.gson.Gson;
 import com.persequor.model.Event;
 
 public class EventSerializer {
-    private Gson gson;
+    private final Gson gson;
 
     public EventSerializer(Gson gson) {
         this.gson = gson;

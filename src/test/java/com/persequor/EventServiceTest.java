@@ -1,9 +1,8 @@
 package com.persequor;
 
 
-import com.persequor.repository.EventRepository;
+import com.persequor.broker.EventQueue;
 import org.junit.Before;
-import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
@@ -11,15 +10,15 @@ public class EventServiceTest {
 
     private EventService service;
     @Mock
-    private EventSerializer serializer;
+    private EventSerializer eventSerializer;
     @Mock
-    private EventRepository repository;
+    private EventQueue eventQueue;
 
     @Before
     public void setup() {
         MockitoAnnotations.initMocks(this);
 
-        service = new EventService(serializer, repository);
+        service = new EventService(eventSerializer, eventQueue);
     }
 
     /*

@@ -1,21 +1,21 @@
 package com.persequor;
 
+import com.persequor.broker.EventQueue;
 import com.persequor.exceptions.EventServiceException;
-import com.persequor.repository.EventRepository;
 
 public class EventService {
 
     private final EventSerializer eventSerializer;
-    private final EventRepository repository;
+    private EventQueue eventQueue;
 
-    public EventService(EventSerializer eventSerializer, EventRepository repository)
+    public EventService(EventSerializer eventSerializer, EventQueue eventQueue)
     {
         this.eventSerializer = eventSerializer;
-        this.repository = repository;
+        this.eventQueue = eventQueue;
     }
 
-    public void process(String serializedEvent) throws EventServiceException {
-        // deserialize event
-        // store event
+    public void handleRequest(String serializedEvent) throws EventServiceException {
+        //TODO: Validate event ID
+        //TODO: Push it to the queue
     }
 }

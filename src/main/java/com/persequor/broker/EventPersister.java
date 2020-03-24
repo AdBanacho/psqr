@@ -1,29 +1,27 @@
 package com.persequor.broker;
 
 import com.persequor.EventSerializer;
+import com.persequor.model.Event;
 import com.persequor.repository.EventRepository;
 
-public class EventProcessor
+public class EventPersister
 	implements EventListener
 {
 	private final EventRepository repository;
-	private final EventSerializer serializer;
 	private EventQueue eventQueue;
 
-	public EventProcessor(
+	public EventPersister(
 			EventRepository repository
-			, EventSerializer serializer
 			, EventQueue eventQueue
 	) {
 		this.repository = repository;
-		this.serializer = serializer;
 		this.eventQueue = eventQueue;
 	}
 
 	@Override
-	public void handle(String event) {
-		//TODO: Deserialize event
+	public void handle(Event event, int deliveryTag) {
 		//TODO: Store event
+		//TODO: Pass event on to "statistics" queue
 		//TODO: Acknowledge against the queue
 	}
 }

@@ -15,7 +15,7 @@ public class EventService {
     }
 
     public void handleRequest(String serializedEvent) throws EventServiceException {
-        //TODO: Validate event ID
-        //TODO: Push it to the queue
+        //TODO: Validate event
+        //TODO: Push it to the "persist" queue
     }
 }

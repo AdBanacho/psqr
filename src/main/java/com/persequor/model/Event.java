@@ -1,6 +1,8 @@
 package com.persequor.model;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 public class Event {
@@ -8,6 +10,7 @@ public class Event {
     private LocalDateTime createdAt;
     private String source;
     private String action;
+    private List<String> trackedIds = new ArrayList<>();
 
     public UUID getId() {
         return id;
@@ -39,5 +42,13 @@ public class Event {
 
     public void setAction(String action) {
         this.action = action;
+    }
+
+    public List<String> getTrackedIds() {
+        return trackedIds;
+    }
+
+    public void setTrackedIds(List<String> trackedIds) {
+        this.trackedIds = trackedIds;
     }
 }

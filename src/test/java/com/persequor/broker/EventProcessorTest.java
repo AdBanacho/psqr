@@ -14,12 +14,12 @@ public class EventProcessorTest {
 	@Mock
 	private EventQueue eventQueue;
 
-	private EventProcessor eventProcessor;
+	private EventPersister eventProcessor;
 
 	@Before
 	public void setup() {
 		MockitoAnnotations.initMocks(this);
 
-		eventProcessor = new EventProcessor(repository, serializer, eventQueue);
+		eventProcessor = new EventPersister(repository, eventQueue);
 	}
 }

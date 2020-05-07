@@ -34,4 +34,6 @@ public class EventSerializerTest {
         Event actual = serializer.deserialize("{id:'4ba28c38-6c9b-4926-b6f5-0d45794fc41f', created_at: '2018-01-12T13:37:30Z', source: 'interweb', action: 'take-over'}");
     }
     */
+
+    /// TODO: Implement tests as needed
 }

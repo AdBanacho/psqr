@@ -22,4 +22,6 @@ public class EventProcessorTest {
 
 		eventProcessor = new EventPersister(repository, eventQueue);
 	}
+
+	/// TODO: Implement tests as needed
 }

@@ -19,4 +19,6 @@ public class StatisticsListenerTest {
 
 		statisticsListener = new StatisticsListener(eventQueue, repository);
 	}
+
+	/// TODO: Implement tests as needed
 }

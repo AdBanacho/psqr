@@ -7,10 +7,10 @@ import java.util.UUID;
 
 public class Event {
     private UUID id;
-    private LocalDateTime createdAt;
+    private LocalDateTime eventTime;
     private String source;
     private String action;
-    private List<String> trackedIds = new ArrayList<>();
+    private List<String> trackedItemIds = new ArrayList<>();
 
     public UUID getId() {
         return id;
@@ -20,12 +20,12 @@ public class Event {
         this.id = id;
     }
 
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
+    public LocalDateTime getEventTime() {
+        return eventTime;
     }
 
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
+    public void setEventTime(LocalDateTime eventTime) {
+        this.eventTime = eventTime;
     }
 
     public String getSource() {
@@ -44,11 +44,11 @@ public class Event {
         this.action = action;
     }
 
-    public List<String> getTrackedIds() {
-        return trackedIds;
+    public List<String> getTrackedItemIds() {
+        return trackedItemIds;
     }
 
-    public void setTrackedIds(List<String> trackedIds) {
-        this.trackedIds = trackedIds;
+    public void setTrackedItemIds(List<String> trackedItemIds) {
+        this.trackedItemIds = trackedItemIds;
     }
 }

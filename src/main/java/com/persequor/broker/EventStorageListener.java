@@ -1,16 +1,15 @@
 package com.persequor.broker;
 
-import com.persequor.EventSerializer;
 import com.persequor.model.Event;
 import com.persequor.repository.EventRepository;
 
-public class EventPersister
+public class EventStorageListener
 	implements EventListener
 {
 	private final EventRepository repository;
 	private EventQueue eventQueue;
 
-	public EventPersister(
+	public EventStorageListener(
 			EventRepository repository
 			, EventQueue eventQueue
 	) {
@@ -20,8 +19,10 @@ public class EventPersister
 
 	@Override
 	public void handle(Event event, int deliveryTag) {
+		//TODO: Validate that events pertaining to the same
+		//      - Handle validation errors
 		//TODO: Store event
 		//TODO: Pass event on to "statistics" queue
-		//TODO: Acknowledge against the queue
+		//TODO: Acknowledge processed events
 	}
 }

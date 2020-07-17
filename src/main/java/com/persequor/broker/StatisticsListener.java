@@ -14,7 +14,7 @@ public class StatisticsListener implements EventListener {
 
 	@Override
 	public void handle(Event event, int deliveryTag) {
-		// TODO: Collect X events in a batch before processing
+		// TODO: Collect up to 10 events in a batch before processing
 		// TODO: call updateStatistics as few times as needed
 		// TODO: acknowledge processed events
 	}

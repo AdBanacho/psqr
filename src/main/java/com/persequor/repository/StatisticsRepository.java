@@ -6,5 +6,9 @@ import java.time.LocalDate;
  * Do not implement the repository, somebody else will do that. You may change the interface though
  */
 public interface StatisticsRepository {
-	void updateStatistics(LocalDate day, int numberOfTrackedIds);
+	/**
+	 * @param day Day of the Event
+	 * @param numberOfTrackedItemIds Number of tracked item ids
+	 */
+	void updateStatistics(LocalDate day, int numberOfTrackedItemIds);
 }

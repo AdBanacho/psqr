@@ -19,7 +19,7 @@ public class EventStorageListener
 
 	@Override
 	public void handle(Event event, int deliveryTag) {
-		//TODO: Validate that events pertaining to the same tracked items comes into the system in order
+		//TODO: Validate that events pertaining to the same tracked items are in order
 		//      - Handle validation errors
 		//TODO: Store event
 		//TODO: Pass event on to "statistics" queue

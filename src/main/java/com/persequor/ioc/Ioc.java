@@ -4,6 +4,7 @@ import com.persequor.EventService;
 import com.persequor.broker.EventQueue;
 import com.persequor.broker.EventStorageListener;
 import com.persequor.broker.StatisticsListener;
+import com.persequor.broker.SubscriptionListener;
 import com.persequor.repository.EventRepository;
 import com.persequor.repository.StatisticsRepository;
 
@@ -12,6 +13,7 @@ public class Ioc {
 		EventQueue eventQueue = getEventQueue();
 		eventQueue.addListener("persist-queue", getEventStorageListener());
 		eventQueue.addListener("statistics", getStatisticsListener());
+		eventQueue.addListener("subscription", getSubscriptionListener());
 	}
 
 	public EventService getEventService() {
@@ -24,6 +26,10 @@ public class Ioc {
 
 	public StatisticsListener getStatisticsListener() {
 		return new StatisticsListener(getEventQueue(), getStatisticsRepository());
+	}
+
+	public SubscriptionListener getSubscriptionListener() {
+		return new SubscriptionListener();
 	}
 
 	private StatisticsRepository getStatisticsRepository() {

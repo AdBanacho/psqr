@@ -22,7 +22,7 @@ public class EventStorageListener
 		//TODO: Validate that events pertaining to the same tracked items are in order
 		//      - Handle validation errors
 		//TODO: Store event
-		//TODO: Pass event on to "statistics" queue
+		//TODO: Pass event on to "statistics" queue and to "subscription" queue
 		//TODO: Acknowledge processed events
 	}
 }

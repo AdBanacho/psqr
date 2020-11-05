@@ -6,7 +6,7 @@ import com.persequor.model.Event;
 public class SubscriptionListener implements EventListener {
 	@Override
 	public void handle(Event event, int deliveryTag) {
-		// Send events to the compliance service matching the source ("EU" or "US")
-		// Acknowledge event against the queue
+		// TODO: Send events to the compliance service matching the source ("EU" or "US")
+		// TODO: Acknowledge event against the queue
 	}
 }

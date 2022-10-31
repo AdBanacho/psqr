@@ -6,3 +6,4 @@ Scope:
 + We suggest to work on it between 0.5 to 2 hours, but feel free to use as much time as you need.
 + Commit as often as you see fit.
 + There is no requirement to finish this, just to have some code for evaluation and further talks.
++ If you have time, review the code in the com.persequor.extensions package.

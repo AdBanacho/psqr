@@ -11,6 +11,12 @@ import java.util.concurrent.Semaphore;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/**
+ * This class contains many parts worthy of a review. As part of your review, consider which things
+ * you think are most important to address.
+ *
+ * Please add your review as inline TODO: comments
+ */
 public class ExtensionListener implements EventListener {
     protected List<IExtension> extensionList;
     private final Map<Class<? extends IExtension>, Map<String, Boolean>> configurationFlags;

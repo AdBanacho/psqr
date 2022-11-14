@@ -1,10 +1,10 @@
 package com.persequor.ioc;
 
 import com.persequor.EventService;
+import com.persequor.broker.EventListener;
 import com.persequor.broker.EventQueue;
 import com.persequor.broker.EventStorageListener;
 import com.persequor.broker.StatisticsListener;
-import com.persequor.broker.SubscriptionListener;
 import com.persequor.repository.EventRepository;
 import com.persequor.repository.StatisticsRepository;
 
@@ -28,8 +28,8 @@ public class Ioc {
 		return new StatisticsListener(getEventQueue(), getStatisticsRepository());
 	}
 
-	public SubscriptionListener getSubscriptionListener() {
-		return new SubscriptionListener();
+	public EventListener getSubscriptionListener() {
+		return null; // This listener is currently out of scope
 	}
 
 	private StatisticsRepository getStatisticsRepository() {

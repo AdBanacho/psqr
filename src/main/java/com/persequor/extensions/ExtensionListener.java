@@ -12,7 +12,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * This class contains many parts worthy of a review. As part of your review, consider which things
+ * This class contains many parts worthy of a review comment. As part of your review, consider which things
  * you think are most important to address.
  *
  * Please add your review as inline TODO: comments

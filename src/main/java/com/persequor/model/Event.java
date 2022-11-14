@@ -8,8 +8,9 @@ import java.util.UUID;
 public class Event {
     private UUID id;
     private LocalDateTime eventTime;
+    private LocalDateTime recordTime;
     private String source;
-    private String action;
+    private EventAction action;
     private List<String> trackedItemIds = new ArrayList<>();
 
     public UUID getId() {
@@ -35,20 +36,27 @@ public class Event {
     public void setSource(String source) {
         this.source = source;
     }
-
-    public String getAction() {
-        return action;
-    }
-
-    public void setAction(String action) {
-        this.action = action;
-    }
-
     public List<String> getTrackedItemIds() {
         return trackedItemIds;
     }
 
     public void setTrackedItemIds(List<String> trackedItemIds) {
         this.trackedItemIds = trackedItemIds;
+    }
+
+    public LocalDateTime getRecordTime() {
+        return recordTime;
+    }
+
+    public void setRecordTime(LocalDateTime recordTime) {
+        this.recordTime = recordTime;
+    }
+
+    public EventAction getAction() {
+        return action;
+    }
+
+    public void setAction(EventAction action) {
+        this.action = action;
     }
 }

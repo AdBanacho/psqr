@@ -1,51 +1,71 @@
-**Persequor Dev Test**
+# Persequor Dev Test
 
-Scope: 
-+ No need to implement interfaces. Implement only the `TODO` comments as you see fit.
-+ You can change anything you like. Frameworks, patterns, interfaces etc.
-+ We suggest to work on it between 0.5 to 2 hours, but feel free to use as much time as you need.
-+ Commit as often as you see fit.
-+ There is no requirement to finish this, just to have some code for evaluation and further talks.
-+ If you have time, review the code in the com.persequor.extensions package.
+Reliability follow-up to merge `08af61c`. The PostgreSQL reference adapters demonstrate atomic event acceptance and publication intents, idempotent statistics updates, and ordering across concurrent storage writers. `EventService.handleRequest` and the `persist-queue`, `statistics`, and `subscription` queue names are unchanged.
 
-## Build and run
+## Build and verification
 
-Use JDK 8 and Maven 3.9.11. The existing Mockito 1.x extension tests require JDK 8 for the commands below. Set `JAVA_HOME` and `PATH` to that JDK.
+Use JDK 8, Maven 3.9.11, and PostgreSQL for the database checks. The existing Mockito extension tests use JDK 8. PostgreSQL 17.11 was used for verification.
 
 ```sh
 mvn clean verify
-mvn -Dtest=StatisticsBenchmark test
+
+# Point to a disposable database. The test role needs CREATE on that database.
+export PSQR_JDBC_URL=jdbc:postgresql://localhost:5432/psqr_test
+export PSQR_JDBC_USER=postgres
+# Set PSQR_JDBC_PASSWORD if the server requires it.
+mvn -Ppostgres-it clean verify
+mvn -Dtest=ReliabilityBenchmark test
 ```
 
-The first command builds the JAR and runs the JUnit 4 suite, including deterministic listener, integration, and `EventService` tests. Expected rejection warnings and injected failure logs exercise the failure paths. The second command opts into an in-process benchmark. The normal build excludes it. `Ioc` still contains exercise placeholders. The tests wire the listeners to test adapters.
+The default build runs JUnit unit tests and builds the JAR. The profile also runs the real PostgreSQL tests, each in a fresh schema created from the migration and dropped afterward. They use independent JDBC connections and observe actual PostgreSQL lock waits. The end-to-end test uses a deterministic in-process broker, enters through `EventService`, and checks committed rows from an independent connection at acknowledgement time. Expect warning and failure logs from deliberately injected faults. The benchmark is opt-in and asserts completion and consistency without latency thresholds.
 
-## Event storage
+For a new reference deployment, apply [V001__event_delivery.sql](src/main/resources/db/migration/V001__event_delivery.sql) once with your migration tooling, for example `psql -d psqr -v ON_ERROR_STOP=1 -f src/main/resources/db/migration/V001__event_delivery.sql`. Inject a PostgreSQL `DataSource` into the three `Postgres*Repository` adapters. Register the storage and statistics listeners on their queues and run `OutboxRelay.poll(limit)` repeatedly from a supervised worker, with a short wait when idle. `Ioc` still has exercise placeholders. Production broker wiring, subscription side effects, and process supervision are supplied by the deployment.
 
-- Lookup queries the union of the incoming tracked item IDs. A single scan of overlapping history rejects the entire event if any relevant row is later. Compare `eventTime` first and `EventAction.getActionOrder()` second. Distinct UUIDs that compare equal are allowed. `recordTime` is optional ingestion metadata.
-- Storage requires an event, UUID, event time, action, and a nonempty list of non-null IDs that remain nonempty after Java 8 `String.trim()`. IDs are compared as supplied and deduplicated for lookup. Statistics requires the event, event time, and the same valid ID list. Its count includes repeated list entries. Source and record time are optional for both listeners. The queue adapter supplies opaque delivery tags.
-- A UUID already present in overlapping history is discarded and acknowledged even if the replay changes other fields. The repository can only reveal replays in the history it returns for the requested IDs. Global UUID uniqueness and replay detection across disjoint IDs or pruned history need a repository constraint or lookup. A null history result or malformed relevant row is a repository failure and leaves the delivery unacknowledged.
-- Storage persists an accepted event, publishes to `statistics` and then `subscription`, and acknowledges last. Invalid, out-of-order, and detected replay deliveries get a warning and an acknowledgement with no storage or publication. Lookup, persistence, publication, and acknowledgement failures propagate with their causes. Later steps are skipped. A failed acknowledgement can have an uncertain broker outcome.
-- Persistence followed by a failure can leave a stored event with neither or only one downstream publication. An acknowledgement failure can leave both publications in place. On redelivery, the UUID check will discard the replay if persistence is visible, so it cannot repair missing publications. A transactional outbox coupled with storage and idempotent downstream consumers would make retry safe.
-- Run one storage listener instance as the sole writer for overlapping items. It serializes deliveries and the repository must make persisted rows visible to subsequent lookups. The concurrent-delivery test holds persistence open and verifies that a second delivery waits and then sees the committed event. Multiple writers would need one transaction or equivalent serialization covering **all** affected IDs for lookup and insert. A multi-item event requires one atomic decision.
+## Storage and publication
 
-## Statistics batching
+- The storage repository owns a `READ COMMITTED` transaction. It serializes each UUID with a transaction-scoped PostgreSQL advisory lock and locks all distinct tracked item rows in Java string sort order. Rows are created for previously unseen IDs, so overlapping first events also serialize. Every writer must follow this protocol. A UUID lock hash collision adds contention only. Disjoint writes have no shared application lock.
+- The repository checks the latest committed event for each item while holding all item locks. It compares `eventTime`, retaining nanosecond precision, then `EventAction.getActionOrder()`. Distinct UUIDs that compare equal are valid. A later row for any item rejects the whole event. An accepted event, all updated item heads, and exactly two outbox rows commit together. A rejected transaction can leave empty item lock rows for previously unseen IDs.
+- Replay is global by UUID. An identical replay matches event time, action, source, and the ordered tracked-ID list including duplicates. `recordTime` is ingestion metadata and may vary on replay. A UUID conflict or stale event is logged with the UUID and terminally acknowledged. An identical replay is acknowledged and existing intents remain eligible. A null event, UUID, event time, action, or missing or blank tracked IDs is terminally invalid. The PostgreSQL reference accepts valid UTF-8 item IDs of up to 1,024 bytes without NUL and a valid Unicode source when present. IDs are otherwise used as supplied.
+- The storage listener acknowledges after the repository returns from commit. SQL failures propagate with their causes. There is no in-process transaction retry. The adapter must redeliver on transient database errors, including deadlock or lost commit responses, so the entire operation starts again. If the original commit succeeded, the durable UUID resolves the retry. Keep PostgreSQL durable commits enabled and apply bounded JDBC connection, statement, and lock timeouts appropriate to the deployment.
+- The relay loads the immutable payload from the accepted row and uses `event UUID:destination` as the message ID. It waits at most the configured duration for broker confirmation. Failed or uncertain sends back off from 100 ms to a cap of 60 seconds. Pending intents remain durable and retry indefinitely. `failure_count`, `last_error`, and `next_attempt_at` expose stuck destinations. After repairing a route, an operator may move `next_attempt_at` to `clock_timestamp()` for the affected pending rows while the relay is stopped. Run the relay on a clock synchronized with PostgreSQL.
+- Run **one active relay thread per database**. The supervisor must stop or fence the old process before starting a replacement. The reference has no claims or leases and does not support overlapping relay workers. After restart any unconfirmed intent becomes eligible when due. A send the broker accepted before confirmation was durably recorded can be repeated with the same message ID. The relay provides no FIFO guarantee across events or destinations. Subscribers should handle reordering and deduplicate by message ID or event UUID, committing their effect and deduplication key together.
 
-- Flush at 10 deliveries or at the configured maximum age from the first pending delivery, whichever comes first. The default is one second. A delivery that sees an expired batch flushes it before opening a new batch. The deadline targets the start of a flush under healthy scheduling. Each flush sums list sizes by `eventTime.toLocalDate()`, writes once per day in order of first occurrence, and then acknowledges each tag in delivery order.
-- The default constructor owns a single daemon scheduler. The configurable constructor borrows its scheduler. The caller keeps a borrowed scheduler running through listener shutdown and should use an executor that removes cancelled tasks promptly. Stop delivery and let active callbacks finish before calling `close()`, which flushes any healthy partial batch and shuts down an owned scheduler. Delivery, timeout, and close share a monitor, so a stale timeout cannot flush a later batch. At most ten tags are buffered in the listener. The queue adapter owns prefetch and backpressure.
-- The port signatures are unchanged. Statistics calls the repository and queue from either the delivery, scheduler, or closing thread. A thread-affine queue adapter must marshal acknowledgements onto the tag's owning thread/channel, preserve individual acknowledgement semantics, and surface errors. Its dispatch must avoid a cycle where the channel thread waits to enter the listener while the listener waits for that thread. Adapters must avoid reentrant delivery from port calls and avoid mutating an event during delivery.
-- A write failure stops the listener and leaves the whole batch unacknowledged. Earlier day updates may already have committed, and the failing write can have an uncertain outcome. An acknowledgement failure after successful writes stops the listener at that tag. Earlier acknowledgements may have succeeded. The listener logs failures, retains the failed batch, and surfaces the cause to a synchronous caller or on subsequent delivery or close. It never retries the batch itself. The adapter or supervisor should stop delivery and handle reconciliation or redelivery. Replaying unacknowledged tags can double-count. Reliable retries need durable idempotency keyed by event UUID, with deduplication and counter updates committed together. Atomic multi-day writes alone would still leave a write-to-ack gap.
+## Broker and statistics contracts
 
-## Benchmark and operational measurements
+- `EventQueue.push` accepts ingress durably before returning and surfaces rejection or unknown outcome. `ConfirmedPublisher.publish` submits promptly and completes successfully only on a durable, routed broker confirmation. Its adapter must correlate confirms and returns to individual sends, use durable routes and persistent messages, surface negative or unroutable outcomes, and clean up stalled confirmation state. A relay timeout bounds the wait. The broker may still accept that send.
+- `EventQueue.acknowledge` applies to a single tag on its owning channel. Its adapter must surface detectable failures and permit redelivery of unacknowledged messages. For a thread-affine broker, marshal acks from the scheduler or closing thread without making the channel thread wait on a listener that is itself waiting on that channel. Use manual acknowledgements and bounded prefetch. Stop delivery and drain callbacks before closing the statistics listener. Port calls must avoid reentrant delivery into the same listener. Messages for statistics should come from the trusted relay path.
+- Statistics flushes at 10 deliveries, at a configurable age from the first pending delivery (one second by default), or on healthy shutdown. The deadline is a target for starting the flush. The default listener owns its scheduler. With the injected scheduler, its caller keeps it running through close and should remove cancelled tasks promptly. Delivery, timeout, and shutdown share a monitor. The listener buffers at most ten tags.
+- A statistics event without a UUID, event time, or valid nonempty tracked-ID list is logged and acknowledged without applying a count. The typed model represents malformed UUIDs as a decoding error, which the broker adapter must handle as poison input. Count every list entry, including repeated IDs, grouped by `eventTime.toLocalDate()`. The daily table uses the Java epoch-day number to preserve the full date range.
+- The statistics repository owns a transaction. It acquires processing keys in UUID order using the unique constraint and only aggregates newly inserted keys. Within a batch the first copy of each UUID supplies the count. It increments daily rows in date order via atomic upserts. A failed transaction rolls back both keys and all daily changes. The listener acknowledges every tag individually after commit, including duplicates. On a write or acknowledgement failure it stops and surfaces the error, so a supervisor can restart and redeliver safely. Retain processing keys indefinitely in this exercise. Any finite policy must cover the longest possible broker, outbox, archive, and manual replay window.
 
-The benchmark runs the statistics listener with its real scheduler, an in-process acknowledgement recorder, and a counter-only repository. It warms up with three sparse deliveries and 50,000 sustained deliveries, then measures 10 deliveries spaced 1,100 ms apart and 200,000 deliveries submitted back-to-back. Every event contains two items. The date pattern is eight events on one day and two on the next.
+## Failure matrix
 
-Throughput uses the window from first arrival to last acknowledgement. The p95 is the nearest-rank percentile of per-delivery monotonic time from just before `handle` to the acknowledgement callback. Writes per batch are actual repository calls divided by acknowledged batches. The sparse sample is deliberately small, and the test adapters introduce no network or disk I/O.
+| Boundary | Durable state | Acknowledgement and recovery |
+| --- | --- | --- |
+| Storage fails before commit | No accepted row or new intents | Leave ingress unacknowledged. Retry the full transaction. |
+| Storage commit response or ack is lost | If committed, one event and two intents | Redelivery resolves by UUID. The relay can progress independently. |
+| One destination rejects or times out | Other destination can be confirmed. The failed intent stays pending. | Ingress can already be acknowledged. Retry the pending destination after backoff. |
+| Broker accepts before confirmation is recorded | Broker copy can exist while intent stays pending | Restart can publish a second copy with the same message ID. |
+| A later statistics increment fails | No new keys or increments from that batch | Leave all its deliveries unacknowledged. Redeliver after recovery. |
+| Statistics commit response or ack is lost | If committed, keys and totals exist together | Redeliver unacknowledged tags. Existing keys suppress a second increment. |
 
-One run on 2026-11-11 used Amazon Corretto 8u512, Maven 3.9.11, and Linux 6.18.57 x86-64 on an AMD EPYC 9V74 workspace with 9 processors visible to the JVM.
+## Cutover from the previous exercise
 
-| Workload | Events | Batches | Events/s | p95 arrival-to-ack | Writes/batch |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Sparse | 10 | 10 | 0.92 | 1,000.763 ms | 1.00 |
-| Sustained | 200,000 | 20,000 | 1,486,237.78 | 0.012 ms | 2.00 |
+Quiesce old writers and consumers, record a cutover watermark, and reconcile or drain outstanding deliveries. Import authoritative stored events with their original UUIDs and payloads. Seed each item head from the latest event by the existing comparator before enabling concurrent writers. Preserve known broker confirmations where they can be proven. For uncertain publications, reconcile against destination records and enqueue missing or uncertain intents only after downstream deduplication is in place. Historical subscriptions without reliable deduplication need reconciliation or explicit approval of duplicate side effects before replay.
 
-A proposed production measurement uses broker delivery to confirmed acknowledgement over a stated load, date mix, and adapter configuration. Record p95 across a defined window such as a 15-minute steady-state run. Track the failed-flush rate and the oldest pending delivery age alongside it. Treat the window as a proposal. The exercise defines no production latency threshold or SLA.
+Historical aggregate totals alone cannot establish which UUIDs were counted. Build a shadow statistics table and processing-key set together from a trusted per-event ledger, or rebuild both from the authoritative accepted events if all accepted history is meant to count. Validate the new totals and switch both tables at the same watermark. Seeding keys from guesses can miss counts. Keeping the old totals while replaying keyless history can double-count. If neither historical source is trustworthy, isolate legacy totals and quarantine old statistics deliveries until their effects can be reconciled.
+
+## Local benchmark and service objective
+
+The benchmark used Amazon Corretto 8u512, Maven 3.9.11, PostgreSQL 17.11, Linux 6.18.57 x86-64 on an AMD EPYC 9V74 workspace with nine JVM-visible processors, direct JDBC connections, and immediate simulated broker confirms. One relay drains statistics deliveries between polls. It warms up with 200 events at 100/s. The workload is 60% hot-item events, 40% two-item events, and an 80/20 date mix with a hot key per date. Every 100th event, starting with the first, gets one simulated subscription rejection.
+
+Latency runs from return of the storage commit to the later of both simulated confirmations and the statistics commit. The benchmark samples the oldest unconfirmed intent about every 100 ms. Sparse submissions were spaced 1.1 seconds apart. Sustained submissions targeted 100 accepted events per second for about 10 seconds.
+
+| Workload | Events | Window through completion | Accepted/s | Completed/s | p95 | p99 | Retries | Peak sampled oldest intent |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Sparse | 10 | 10.93 s | 1.01 | 0.91 | 1,029.47 ms | 1,029.47 ms | 1 | 104 ms |
+| Sustained | 1,000 | 10.03 s | 100.06 | 99.71 | 110.30 ms | 128.14 ms | 10 | 113 ms |
+
+Zero measured events took more than five seconds in this local run. The interview objective is **99.9% of accepted events completed within five seconds over a rolling 30-day window**. Start at the acceptance commit and end after both broker confirmations and the statistics effect commit. Use durable commit timestamps from PostgreSQL change capture and confirmation observations keyed by UUID and destination. Keep the earliest durable confirmation per destination. Where a confirmation observation is lost, wait for a later observable confirmation rather than inferring success.
+
+Calculate the objective on unique accepted UUIDs, with cohorts evaluated once their five-second deadlines have passed. Keep late and incomplete events in the denominator as misses, including during retries or outages. Exclude rejections and duplicate deliveries. Alert on oldest unpublished intent by destination, retries and their rate, and oldest accepted event without a statistics processing key. Separate the latter by whether the statistics publish was confirmed to distinguish publication lag from consumer lag. Monitor missing telemetry and error-budget burn alongside these signals. The local run provides short-window evidence for simulated adapters. The 30-day objective requires production telemetry.

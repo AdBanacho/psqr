@@ -1,14 +1,12 @@
 package com.persequor.broker;
 
 import com.persequor.model.Event;
+import com.persequor.model.StatisticsEntry;
 import com.persequor.repository.StatisticsRepository;
 
 import java.time.Duration;
-import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -95,8 +93,8 @@ public class StatisticsListener implements EventListener, AutoCloseable {
         if (first) {
             pending = new Batch(nanoTime.getAsLong());
         }
-        pending.deliveries.add(new Delivery(event.getEventTime().toLocalDate(),
-                event.getTrackedItemIds().size(), deliveryTag));
+        pending.deliveries.add(new Delivery(new StatisticsEntry(event.getId(), event.getEventTime().toLocalDate(),
+                event.getTrackedItemIds().size()), deliveryTag));
         if (pending.deliveries.size() == BATCH_SIZE) {
             flush();
         } else if (first) {
@@ -122,21 +120,14 @@ public class StatisticsListener implements EventListener, AutoCloseable {
             return;
         }
         pending.cancelTimeout();
-        Map<LocalDate, Integer> totals;
-        try {
-            totals = pending.totals();
-        } catch (ArithmeticException e) {
-            throw fail("Statistics batch count exceeds the repository's integer range", e);
+        List<StatisticsEntry> entries = new ArrayList<>(pending.deliveries.size());
+        for (Delivery delivery : pending.deliveries) {
+            entries.add(delivery.entry);
         }
-        int updated = 0;
-        for (Map.Entry<LocalDate, Integer> total : totals.entrySet()) {
-            try {
-                statisticsRepository.updateStatistics(total.getKey(), total.getValue());
-                updated++;
-            } catch (RuntimeException e) {
-                throw fail("Statistics update failed for " + total.getKey() + " after " + updated
-                        + " successful day update(s)", e);
-            }
+        try {
+            statisticsRepository.apply(entries);
+        } catch (RuntimeException e) {
+            throw fail("Could not commit statistics batch", e);
         }
         for (Delivery delivery : pending.deliveries) {
             acknowledge(delivery.tag);
@@ -198,24 +189,14 @@ public class StatisticsListener implements EventListener, AutoCloseable {
                 timeout = null;
             }
         }
-
-        private Map<LocalDate, Integer> totals() {
-            Map<LocalDate, Integer> totals = new LinkedHashMap<>();
-            for (Delivery delivery : deliveries) {
-                totals.merge(delivery.day, delivery.itemCount, Math::addExact);
-            }
-            return totals;
-        }
     }
 
     private static final class Delivery {
-        private final LocalDate day;
-        private final int itemCount;
+        private final StatisticsEntry entry;
         private final int tag;
 
-        private Delivery(LocalDate day, int itemCount, int tag) {
-            this.day = day;
-            this.itemCount = itemCount;
+        private Delivery(StatisticsEntry entry, int tag) {
+            this.entry = entry;
             this.tag = tag;
         }
     }

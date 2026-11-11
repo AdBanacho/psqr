@@ -12,5 +12,6 @@ import java.util.Collection;
 public interface EventRepository {
     void persist(Event event) throws EventRepositoryErrorException;
 
+    /** Returns available history for the union of the supplied IDs, in arbitrary order. */
     EventList get(Collection<String> trackedIds);
 }

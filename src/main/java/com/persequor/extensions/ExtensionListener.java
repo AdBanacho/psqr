@@ -29,11 +29,17 @@ public class ExtensionListener implements EventListener {
     @Override
     public void handle(Event event,int deliveryTag)
     {
+        // TODO: A per-call semaphore cannot coordinate concurrent deliveries. Define the required
+        // serialization across calls and release any acquired permit in a finally block.
         Semaphore semaphore = new Semaphore(1);
         extensionList.stream()
                 .sorted(Comparator.comparing(IExtension::order))
+                // TODO: Keep sorted traversal through execution. toMap does not preserve it and
+                // throws on duplicate order() values. Define whether ties are allowed and how they run.
                 .collect(Collectors.toMap(IExtension::order, Function.identity()))
                 .forEach((i, extension) -> {
+                    // TODO: Look up configuration by extension class and define missing configuration.
+                    // TODO: Specify what true/false mean for init and execute, then report failures accordingly.
                     if(getIfAdvanced(extension).map(e -> !e.isInitialized() && e.init(configurationFlags.get(e))).orElse(false)) {
                         throw new RuntimeException("Improper intialization");
                     }

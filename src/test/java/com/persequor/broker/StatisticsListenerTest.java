@@ -1,6 +1,7 @@
 package com.persequor.broker;
 
 import com.persequor.model.Event;
+import com.persequor.model.StatisticsEntry;
 import org.junit.Test;
 
 import java.time.Duration;
@@ -9,6 +10,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -22,7 +27,8 @@ public class StatisticsListenerTest {
     private final ManualScheduler scheduler = new ManualScheduler();
     private final List<String> calls = new ArrayList<>();
     private final RuntimeException portFailure = new RuntimeException("port failure");
-    private LocalDate failingDay;
+    private final Set<UUID> counted = new HashSet<>();
+    private boolean failCommit;
     private int failingTag = -1;
     private final EventQueue queue = new EventQueue() {
         @Override
@@ -48,13 +54,13 @@ public class StatisticsListenerTest {
 
     @Test
     public void nineWaitTenFlushAndElevenStartsANewBatch() {
-        Event event = event(TIME, CREATE, "a", "a");
         for (int tag = 1; tag <= 9; tag++) {
-            listener.handle(event, tag);
+            listener.handle(event(TIME, CREATE, "a", "a"), tag);
         }
         assertTrue(calls.isEmpty());
 
-        listener.handle(event, 10);
+        Runnable stale = scheduler.lastCallback;
+        listener.handle(event(TIME, CREATE, "a", "a"), 10);
         List<String> expected = new ArrayList<>();
         expected.add(DAY + ":20");
         for (int tag = 1; tag <= 10; tag++) {
@@ -62,7 +68,8 @@ public class StatisticsListenerTest {
         }
         assertEquals(expected, calls);
 
-        listener.handle(event, 11);
+        listener.handle(event(TIME, CREATE, "a", "a"), 11);
+        stale.run();
         assertEquals(expected, calls);
         scheduler.advance(Duration.ofSeconds(1));
         expected.add(DAY + ":2");
@@ -115,7 +122,9 @@ public class StatisticsListenerTest {
     public void invalidFieldsAreAcknowledgedWithoutChangingBatchAndUnusedFieldsAreOptional() {
         Event missingList = event(TIME, CREATE, "a");
         missingList.setTrackedItemIds(null);
-        List<Event> invalid = Arrays.asList(null, missingList, event(null, CREATE, "a"),
+        Event missingUuid = event(TIME, CREATE, "a");
+        missingUuid.setId(null);
+        List<Event> invalid = Arrays.asList(null, missingList, missingUuid, event(null, CREATE, "a"),
                 event(TIME, CREATE), event(TIME, CREATE, "a", null), event(TIME, CREATE, "  "));
         for (Event event : invalid) {
             listener.handle(event, 1);
@@ -124,7 +133,6 @@ public class StatisticsListenerTest {
         calls.clear();
 
         Event valid = event(TIME, null, "a");
-        valid.setId(null);
         listener.handle(valid, 2);
         listener.close();
 
@@ -132,8 +140,8 @@ public class StatisticsListenerTest {
     }
 
     @Test
-    public void partialMultiDayFailureLeavesAllTagsUnacknowledgedAndNeverRepeatsUpdates() {
-        failingDay = NEXT_DAY;
+    public void transactionFailureLeavesAllTagsUnacknowledged() {
+        failCommit = true;
         listener.handle(event(TIME, CREATE, "a"), 1);
         listener.handle(event(TIME.plusMinutes(1), CREATE, "b", "c"), 2);
 
@@ -142,11 +150,11 @@ public class StatisticsListenerTest {
         IllegalStateException stopped = expect(IllegalStateException.class,
                 () -> listener.handle(event(TIME, CREATE, "c"), 3));
         assertSame(portFailure, stopped.getCause().getCause());
-        assertTrue(stopped.getCause().getMessage().contains("after 1 successful day"));
+        assertTrue(stopped.getCause().getMessage().contains("commit statistics batch"));
         expect(IllegalStateException.class, listener::close);
         scheduler.advance(Duration.ofSeconds(1));
 
-        assertEquals(Arrays.asList(DAY + ":1", NEXT_DAY + ":2"), calls);
+        assertTrue(calls.isEmpty());
     }
 
     @Test
@@ -176,7 +184,7 @@ public class StatisticsListenerTest {
     @Test
     public void customMaximumAgeControlsPartialFlush() {
         AtomicBoolean flushed = new AtomicBoolean();
-        StatisticsListener custom = new StatisticsListener(queue, (day, count) -> flushed.set(true),
+        StatisticsListener custom = new StatisticsListener(queue, entries -> flushed.set(true),
                 Duration.ofMillis(75), scheduler, scheduler::nanoTime);
         custom.handle(event(TIME, CREATE, "a"), 1);
         scheduler.advance(Duration.ofMillis(74));
@@ -186,10 +194,25 @@ public class StatisticsListenerTest {
         custom.close();
     }
 
-    private void update(LocalDate day, int count) {
-        calls.add(day + ":" + count);
-        if (day.equals(failingDay)) {
+    @Test
+    public void batchCarriesUuidsAndAcknowledgesDuplicatesAfterCommit() {
+        Event repeated = event(TIME, CREATE, "a", "a");
+        listener.handle(repeated, 1);
+        listener.handle(repeated, 2);
+        listener.handle(event(TIME.plusDays(1), CREATE, "b"), 3);
+        scheduler.advance(Duration.ofSeconds(1));
+        listener.handle(repeated, 4);
+        listener.close();
+
+        assertEquals(Arrays.asList(DAY + ":2", NEXT_DAY + ":1", "ack:1", "ack:2", "ack:3", "ack:4"), calls);
+    }
+
+    private void update(List<StatisticsEntry> entries) {
+        if (failCommit) {
             throw portFailure;
         }
+        List<StatisticsEntry> fresh = entries.stream().filter(entry -> counted.add(entry.getId()))
+                .collect(Collectors.toList());
+        StatisticsEntry.totals(fresh).forEach((day, count) -> calls.add(day + ":" + count));
     }
 }

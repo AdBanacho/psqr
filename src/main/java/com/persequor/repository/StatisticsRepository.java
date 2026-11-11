@@ -1,14 +1,10 @@
 package com.persequor.repository;
 
-import java.time.LocalDate;
+import com.persequor.model.StatisticsEntry;
 
-/**
- * Do not implement the repository, somebody else will do that. You may change the interface though
- */
+import java.util.List;
+
 public interface StatisticsRepository {
-	/**
-	 * @param day Day of the Event
-	 * @param numberOfTrackedItemIds Number of tracked item ids
-	 */
-	void updateStatistics(LocalDate day, int numberOfTrackedItemIds);
+    /** Commits new event keys and their daily increments together. Already-counted UUIDs are skipped. */
+    void apply(List<StatisticsEntry> entries);
 }
